@@ -1,0 +1,11 @@
+# Data processing
+pandas
+
+# Reading XLSX
+openpyxl
+
+# HTTP requests (ZZZS + Telegram)
+requests
+
+# HTML parsing for finding the daily download link
+beautifulsoup4

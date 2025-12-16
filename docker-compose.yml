@@ -1,0 +1,9 @@
+services:
+  zzzs-gp-alert:
+    build: .
+    env_file:
+      - .env
+    volumes:
+      # Keep CSV history on the host so diffs work across runs
+      - /your/data/location:/app
+    restart: unless-stopped
