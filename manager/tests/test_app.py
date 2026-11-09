@@ -54,8 +54,8 @@ class ManagementTests(unittest.TestCase):
             self.assertEqual(sender.call_count,1)
             self.assertEqual(sender.call_args.args[0],'123')
             self.assertIn('Začetni seznam: 1',sender.call_args.args[1])
-            self.assertIn('A | GP | P | S | LJ',sender.call_args.args[1])
-            self.assertNotIn('B | Dentist',sender.call_args.args[1])
+            self.assertIn('📍 LJ',sender.call_args.args[1]);self.assertIn('• A\n   GP\n   P\n   S',sender.call_args.args[1])
+            self.assertNotIn('Dentist',sender.call_args.args[1])
         u=self.client.get('/api/state').json['users'][0]
         self.assertEqual(u['alias'],'Ana');self.assertEqual(u['mode'],'daily');self.assertEqual(u['filters']['locations'],['LJ'])
         with patch.object(a,'send'):
@@ -94,6 +94,11 @@ class ManagementTests(unittest.TestCase):
             a.send('123','\n'.join('Doctor '+str(i)+' | '+'x'*180 for i in range(100)))
         self.assertGreater(transport.call_count,1)
         self.assertTrue(all(len(c.args[1]['text'])<=3500 for c in transport.call_args_list))
+        blocks=['• Doctor '+str(i)+'\n   GP\n   Clinic '+('x'*200)+'\n   Address' for i in range(40)]
+        with patch.object(a,'telegram') as transport:
+            a.send('123','\n\n'.join(blocks))
+        messages=[c.args[1]['text'] for c in transport.call_args_list]
+        self.assertTrue(all(any(block in message for message in messages)for block in blocks))
 
     def test_send_now_targets_one_user_and_updates_baseline(self):
         self.post('users',{'chat_id':'123','enabled':False,'filters':{'locations':['LJ']}})
@@ -103,7 +108,7 @@ class ManagementTests(unittest.TestCase):
             r=self.post('users/123/send',{})
         self.assertEqual(r.status_code,200);self.assertEqual(r.json['count'],1)
         sender.assert_called_once();self.assertEqual(sender.call_args.args[0],'123')
-        self.assertIn('A | GP',sender.call_args.args[1]);self.assertNotIn('B | Dentist',sender.call_args.args[1])
+        self.assertIn('• A\n   GP',sender.call_args.args[1]);self.assertNotIn('Dentist',sender.call_args.args[1])
         with a.db() as c:
             u=c.execute("SELECT * FROM users WHERE chat_id='123'").fetchone()
             self.assertFalse(u['enabled']);self.assertTrue(u['last_sent']);self.assertIn('a',json.loads(u['baseline']))
@@ -132,6 +137,7 @@ class ManagementTests(unittest.TestCase):
             extra=dict(self.rows[0],id='c',name='New GP')
             data['doctors']=self.rows+[extra]
             self.assertTrue(a.check());self.assertEqual(sender.call_args.args[0],'1');self.assertEqual(sender.call_count,1)
+            self.assertIn('🟢 + New GP',sender.call_args.args[1])
             data['doctors']=self.rows
             sender.side_effect=RuntimeError('Telegram rejected request: 403')
             self.assertTrue(a.check())
@@ -139,7 +145,17 @@ class ManagementTests(unittest.TestCase):
                 baseline=json.loads(c.execute("SELECT baseline FROM users WHERE chat_id='1'").fetchone()[0])
             self.assertIn('c',baseline)  # retry delivery without losing the change
             sender.side_effect=None
-            a.check();self.assertIn('Odstranjeni',sender.call_args.args[1])
+            a.check();self.assertIn('🔴 − New GP',sender.call_args.args[1])
+
+    def test_structured_list_groups_locations_and_omits_repeated_accepting_yes(self):
+        rows=[self.rows[1],self.rows[0],dict(self.rows[0],id='c',name='C',accepting='NE')]
+        text=a.full_list_message(rows,{'dates':{'gp':'09.11.2026'}})
+        self.assertEqual(text.count('📍 LJ'),1)
+        self.assertIn('• A\n   GP\n   P\n   S',text)
+        self.assertNotIn('Sprejema: DA',text)
+        self.assertIn('⚠ Trenutno ne sprejema novih pacientov.',text)
+        self.assertNotIn(' | ',text)
+        self.assertIn('📅 Podatki ZZZS: 09.11.2026',text)
 
     def test_validation_and_secret_not_returned(self):
         self.assertEqual(self.post('users',{'chat_id':'bad'}).status_code,400)

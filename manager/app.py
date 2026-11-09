@@ -120,19 +120,23 @@ def bot_identity(token=None):
 
 
 def send(chat_id, text):
-    # Split on lines while respecting Telegram's character limit.
+    # Keep doctor blocks together; only split oversized blocks at line boundaries.
+    blocks = []
+    for block in text.split('\n\n'):
+        while len(block) > 3500:
+            cut = block.rfind('\n', 0, 3501)
+            if cut <= 0:
+                cut = 3500
+            blocks.append(block[:cut])
+            block = block[cut:].lstrip('\n')
+        if block:
+            blocks.append(block)
     part = ''
-    for line in text.splitlines():
-        while len(line) > 3500:
-            if part:
-                telegram('sendMessage', {'chat_id': chat_id, 'text': part})
-                part = ''
-            telegram('sendMessage', {'chat_id': chat_id, 'text': line[:3500]})
-            line = line[3500:]
-        if len(part) + len(line) + 1 > 3500:
+    for block in blocks:
+        if part and len(part) + len(block) + 2 > 3500:
             telegram('sendMessage', {'chat_id': chat_id, 'text': part})
             part = ''
-        part += line + '\n'
+        part += ('\n\n' if part else '') + block
     if part:
         telegram('sendMessage', {'chat_id': chat_id, 'text': part})
 
@@ -211,18 +215,39 @@ def matching(rows, filters):
             and (not filters.get('accepting_only', True) or r['accepting'] == 'DA')]
 
 
+def doctor_list(rows, marker='•'):
+    blocks = []
+    location = None
+    for r in sorted(rows, key=lambda r: (r['location'], r['name'], r['service'])):
+        clean = lambda key: ' '.join(str(r.get(key, '')).split())
+        heading = ''
+        if r['location'] != location:
+            location = r['location']
+            heading = '📍 ' + clean('location') + '\n\n'
+        details = [marker + ' ' + clean('name')]
+        details.extend('   ' + clean(k) for k in ['service', 'provider', 'address'] if clean(k))
+        if r.get('accepting') == 'NE':
+            details.append('   ⚠ Trenutno ne sprejema novih pacientov.')
+        elif r.get('accepting') not in ('DA', '', None):
+            details.append('   Sprejemanje novih pacientov: ' + clean('accepting'))
+        blocks.append(heading + '\n'.join(details))
+    return '\n\n'.join(blocks)
+
+
+def message_footer(data):
+    return '📅 Podatki ZZZS: ' + ', '.join(sorted(set(data['dates'].values()))) + '\n/stop za odjavo · /status za stanje'
+
+
 def full_list_message(rows, data, enabled=True, initial=False):
-    lines = ['Prijava na ZZZS obvestila je uspela.' if initial else 'ZZZS · Trenutni seznam zdravnikov',
+    lines = ['✅ Prijava na ZZZS obvestila je uspela.\n\n📋 ZZZS · Vaši zdravniki' if initial else '📋 ZZZS · Vaši zdravniki',
              f'{"Začetni seznam" if initial else "Trenutni seznam"}: {len(rows)} zdravnikov ustreza vašim filtrom.']
     if rows:
-        lines.extend('• ' + ' | '.join(r[k] for k in ['name', 'service', 'provider', 'address', 'location'])
-                     + ' | Sprejema: ' + r['accepting'] for r in rows)
+        lines.append('\n' + doctor_list(rows))
     else:
         lines.append('Trenutno ni zdravnikov, ki bi ustrezali vašim filtrom.')
     if not enabled:
         lines.append('Nadaljnja obvestila so začasno ustavljena.')
-    lines.append('\nPodatki ZZZS: ' + ', '.join(sorted(set(data['dates'].values())))
-                 + '\n/stop za odjavo, /status za stanje.')
+    lines.append('\n' + message_footer(data))
     return '\n'.join(lines)
 
 
@@ -270,14 +295,14 @@ def check(notify=True):
             due = old is not None and (daily_due or added or removed)
             status = f'{len(rows)} matching doctors'
             if due and notify:
-                lines = ['ZZZS · ' + datetime.now(TZ).strftime('%d.%m.%Y'), f'{len(rows)} zdravnikov ustreza vašim filtrom.']
-                for label, ids, records in [('Dodani', added, current), ('Odstranjeni', removed, old or {})]:
+                lines = ['🔔 ZZZS · Spremembe zdravnikov', datetime.now(TZ).strftime('%d.%m.%Y'), f'Ustreznih zdravnikov: {len(rows)}']
+                for label, marker, ids, records in [('🟢 Dodani', '🟢 +', added, current), ('🔴 Odstranjeni', '🔴 −', removed, old or {})]:
                     if ids:
                         lines.append(f'\n{label}: {len(ids)}')
-                        lines.extend('• ' + ' | '.join(records[k][f] for f in ['name', 'service', 'provider', 'address', 'location']) for k in sorted(ids))
+                        lines.append(doctor_list([records[k] for k in ids], marker))
                 if not added and not removed:
-                    lines.append('Ni sprememb.')
-                lines.append('\nPodatki ZZZS: ' + ', '.join(sorted(set(data['dates'].values()))) + '\n/stop za odjavo')
+                    lines.append('\n✓ Ni sprememb v vašem izboru.')
+                lines.append('\n' + message_footer(data))
                 try:
                     send(u['chat_id'], '\n'.join(lines))
                     with db() as c:

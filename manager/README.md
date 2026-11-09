@@ -39,3 +39,5 @@ Back up `data` using SQLite's online backup API, or stop the service for a files
 The original one-shot script/Dockerfile remain available; the previous Compose configuration is retained as `docker-compose.legacy.yml`. Retire old cron/task-scheduler invocations when migrating to avoid duplicate alerts. Existing hardcoded IDs/tokens must be migrated privately; the public service does not load legacy credentials automatically.
 
 The invitation result is highlighted and automatically scrolled into view when created. In Manage, **Send now** saves the current form settings and sends the full latest downloaded matching list to that subscriber, including when automatic notifications are paused. Successful sends update their change baseline; failures show an error and preserve the delivery baseline.
+
+Telegram lists are grouped by town with separate multiline doctor entries (name, practice type, provider and address). Change alerts use 🟢 + for additions and 🔴 − for removals. Repeated accepting-yes labels are omitted; non-accepting doctors retain a warning when included by the filters. Long messages split between doctor entries when possible.
