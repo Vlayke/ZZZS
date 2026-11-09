@@ -3,6 +3,10 @@
 
 # outputs
 filtered_doctors_*.csv
+data/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
 
 # python cache
 __pycache__/

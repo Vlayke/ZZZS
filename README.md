@@ -1,3 +1,11 @@
+# Always-running management GUI
+
+The default Docker Compose stack provides a local management GUI with separate Telegram subscriptions, editable aliases, individual doctor/location filters, invitation links and scheduled alerts. See [management setup and operations](manager/README.md).
+
+The instructions below describe the original one-shot script, retained for compatibility with `docker-compose.legacy.yml`.
+
+---
+
 # ZZZS – obvestila o prostih osebnih zdravnikih (Telegram)
 # ZZZS – notifications about available doctors (Telegram)
 
