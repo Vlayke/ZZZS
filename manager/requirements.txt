@@ -1,0 +1,6 @@
+Flask
+requests
+openpyxl
+beautifulsoup4
+gunicorn
+tzdata
