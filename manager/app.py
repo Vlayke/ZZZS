@@ -90,19 +90,31 @@ def event(kind, message):
         c.execute('DELETE FROM events WHERE id < (SELECT COALESCE(MAX(id),0)-500 FROM events)')
 
 
-def telegram(method, body=None):
-    token = setting('bot_token', '')
+def telegram(method, body=None, timeout=40, token=None):
+    token = token or setting('bot_token', '')
     if not token:
         raise RuntimeError('Telegram bot is not configured')
     # Requests exceptions contain the token-bearing URL: never persist or log them.
     try:
-        r = requests.post(f'https://api.telegram.org/bot{token}/{method}', json=body or {}, timeout=40)
+        r = requests.post(f'https://api.telegram.org/bot{token}/{method}', json=body or {}, timeout=timeout)
         data = r.json()
     except Exception:
         raise RuntimeError('Telegram connection failed') from None
     if not data.get('ok'):
         raise RuntimeError('Telegram rejected request: ' + str(data.get('error_code', r.status_code)))
     return data['result']
+
+
+def bot_identity(token=None):
+    try:
+        return telegram('getMe', timeout=8, token=token)
+    except RuntimeError as e:
+        if str(e).endswith((': 401', ': 404')):
+            raise
+        # Telegram can time out getMe for an otherwise functioning bot. The
+        # bot's own chat provides its username without blocking update polling.
+        bot_id = (token or setting('bot_token', '')).split(':')[0]
+        return telegram('getChat', {'chat_id': bot_id}, timeout=12, token=token)
 
 
 def send(chat_id, text):
@@ -314,7 +326,7 @@ def worker():
                 retry_at = time.time() + 1800
             if setting('bot_token'):
                 if not setting('bot_username'):
-                    me = telegram('getMe')
+                    me = bot_identity()
                     put('bot_username', me['username'])
                 updates = telegram('getUpdates', {'offset': setting('offset', 0), 'timeout': 20, 'allowed_updates': ['message']})
                 for update in updates:
@@ -455,13 +467,10 @@ def settings():
             abort(400, 'Invalid bot token')
         verified = None
         try:
-            r = requests.post('https://api.telegram.org/bot' + token + '/getMe', timeout=10).json()
-            if r.get('ok'):
-                verified = r['result']
-            elif r.get('error_code') in (401, 404):
+            verified = bot_identity(token)
+        except RuntimeError as e:
+            if str(e).endswith((': 401', ': 404')):
                 abort(400, 'Telegram rejected this bot token')
-        except (requests.RequestException, ValueError):
-            pass
         put('bot_token', token)
         put('bot_username', verified['username'] if verified else '')
         warning = None if verified else 'Token saved. Telegram verification is pending; the service will keep retrying.'

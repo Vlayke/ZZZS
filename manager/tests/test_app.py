@@ -127,6 +127,17 @@ class ManagementTests(unittest.TestCase):
         self.assertEqual(r.status_code,400);self.assertEqual(a.setting('bot_token'),token)
         a.put('bot_token','')
 
+    def test_identity_falls_back_without_requiring_getme(self):
+        import requests
+        token='1234567890:'+('A'*35)
+        with patch.object(a.requests,'post') as req:
+            response=unittest.mock.Mock()
+            response.json.return_value={'ok':True,'result':{'username':'example_bot'}}
+            req.side_effect=[requests.Timeout(),response]
+            identity=a.bot_identity(token)
+            self.assertEqual(identity['username'],'example_bot')
+            self.assertEqual(req.call_args.kwargs['json'],{'chat_id':'1234567890'})
+
 
 if __name__=='__main__':
     unittest.main()
