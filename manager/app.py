@@ -544,6 +544,33 @@ def send_now(uid):
         scan_lock.release()
 
 
+def test_notification_message():
+    added = {'name': 'TESTNA ZDRAVNICA ANA PRIMER', 'service': 'Splošna dejavnost - splošna ambulanta',
+             'provider': 'TESTNA AMBULANTA — izmišljen primer', 'address': 'Testna ulica 1',
+             'location': '1000 LJUBLJANA', 'accepting': 'DA'}
+    removed = dict(added, name='TESTNI ZDRAVNIK MARKO PRIMER', address='Testna ulica 2')
+    return ('🧪 TESTNO OBVESTILO — NI DEJANSKIH SPREMEMB\n'
+            'Vsi spodnji zdravniki in ambulante so izmišljeni.\n\n'
+            '🔔 ZZZS · Spremembe zdravnikov\n\n🟢 Dodani: 1\n'
+            + doctor_list([added], '🟢 +') + '\n\n🔴 Odstranjeni: 1\n'
+            + doctor_list([removed], '🔴 −')
+            + '\n\nTo je samo prikaz oblikovanja. Vaši filtri in seznam zdravnikov niso spremenjeni.')
+
+
+@app.post('/api/users/<uid>/test')
+def send_test_notification(uid):
+    with db() as c:
+        exists = c.execute('SELECT 1 FROM users WHERE chat_id=?', (uid,)).fetchone()
+    if not exists:
+        abort(404, 'Subscriber not found')
+    try:
+        send(uid, test_notification_message())
+    except RuntimeError as e:
+        abort(502, str(e))
+    event('test', 'Fictional added/removed example delivered to a subscriber')
+    return jsonify(ok=True)
+
+
 @app.post('/api/invites')
 def invite():
     username = setting('bot_username')

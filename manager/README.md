@@ -41,3 +41,5 @@ The original one-shot script/Dockerfile remain available; the previous Compose c
 The invitation result is highlighted and automatically scrolled into view when created. In Manage, **Send now** saves the current form settings and sends the full latest downloaded matching list to that subscriber, including when automatic notifications are paused. Successful sends update their change baseline; failures show an error and preserve the delivery baseline.
 
 Telegram lists are grouped by town with separate multiline doctor entries (name, practice type, provider and address). Change alerts use 🟢 + for additions and 🔴 − for removals. Repeated accepting-yes labels are omitted; non-accepting doctors retain a warning when included by the filters. Long messages split between doctor entries when possible.
+
+Manage also provides **Send test notification**: a clearly labelled fictional example with one green-plus addition and one red-minus removal. It targets only the selected subscriber, works for paused subscribers, and does not save unsaved edits or modify filters, baselines, pending initial delivery or last-sent timestamps. Delivery success/failure appears in the form.

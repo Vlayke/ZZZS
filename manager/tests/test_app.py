@@ -134,6 +134,29 @@ class ManagementTests(unittest.TestCase):
             self.assertEqual(self.post('users/123/send',{}).status_code,409);sender.assert_not_called()
         self.assertFalse(a.scan_lock.locked())
 
+    def test_test_notification_targets_subscriber_without_mutating_subscription(self):
+        self.post('users',{'chat_id':'123','enabled':False,'filters':{'locations':['LJ']}})
+        with a.db() as c:
+            c.execute("UPDATE users SET baseline='{}',last_sent='yesterday',initial_pending=1 WHERE chat_id='123'")
+            before=dict(c.execute("SELECT * FROM users WHERE chat_id='123'").fetchone())
+        with patch.object(a,'send') as sender:
+            r=self.post('users/123/test',{})
+        self.assertEqual(r.status_code,200);sender.assert_called_once()
+        uid,text=sender.call_args.args
+        self.assertEqual(uid,'123');self.assertIn('TESTNO OBVESTILO',text)
+        self.assertIn('izmišljeni',text);self.assertIn('🟢 + TESTNA ZDRAVNICA',text);self.assertIn('🔴 − TESTNI ZDRAVNIK',text)
+        with a.db() as c:
+            self.assertEqual(dict(c.execute("SELECT * FROM users WHERE chat_id='123'").fetchone()),before)
+
+    def test_test_notification_errors_are_reported(self):
+        with patch.object(a,'send') as sender:
+            self.assertEqual(self.post('users/missing/test',{}).status_code,404);sender.assert_not_called()
+        self.post('users',{'chat_id':'123','filters':{}})
+        with patch.object(a,'send',side_effect=RuntimeError('Telegram connection failed')):
+            r=self.post('users/123/test',{})
+        self.assertEqual(r.status_code,502);self.assertEqual(r.json['error'],'Telegram connection failed')
+        self.assertEqual(self.client.post('/api/users/123/test',json={}).status_code,403)
+
     def test_delivery_baselines_and_failures(self):
         for uid, loc in [('1','LJ'),('2','KR')]:
             self.assertEqual(self.post('users',{'chat_id':uid,'alias':uid,'filters':{'locations':[loc]}}).status_code,200)

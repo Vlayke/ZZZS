@@ -60,6 +60,7 @@ function openEditor(u) {
   $('location-search').value=''; $('service-search').value='';
   $('join-method').hidden=!!u; $('delete').hidden=!u;
   $('send-now').hidden=!u; $('send-help').hidden=!u;
+  $('test-notification-area').hidden=!u;
   setMethod(u?'manual':'invite'); checklist('locations'); checklist('services'); $('editor').showModal();
 }
 function checklist(key) {
@@ -93,7 +94,7 @@ $('user-form').onsubmit=async e=>{
 };
 $('send-now').onclick=async()=>{
   if(!editing||!$('user-form').reportValidity())return;
-  $('send-now').disabled=true; $('save').disabled=true; $('delete').disabled=true;
+  $('send-now').disabled=true; $('send-test').disabled=true; $('save').disabled=true; $('delete').disabled=true;
   $('send-now').textContent='Sending…'; $('dialog-error').textContent=''; $('dialog-feedback').textContent='';
   try{
     const uid=editing.chat_id;
@@ -102,7 +103,18 @@ $('send-now').onclick=async()=>{
     $('dialog-feedback').textContent=`Sent to Telegram: ${r.count} matching doctors.`;
     await load();
   }catch(e){$('dialog-error').textContent=e.message;}
-  finally{$('send-now').disabled=false;$('save').disabled=false;$('delete').disabled=false;$('send-now').textContent='Send now';}
+  finally{$('send-now').disabled=false;$('send-test').disabled=false;$('save').disabled=false;$('delete').disabled=false;$('send-now').textContent='Send now';}
+};
+$('send-test').onclick=async()=>{
+  if(!editing)return;
+  const uid=editing.chat_id;
+  $('send-test').disabled=true;$('send-now').disabled=true;$('save').disabled=true;$('delete').disabled=true;
+  $('send-test').textContent='Sending test…';$('dialog-error').textContent='';$('dialog-feedback').textContent='';
+  try{
+    await api('users/'+encodeURIComponent(uid)+'/test',{});
+    $('dialog-feedback').textContent='Test notification sent: fictional green-plus and red-minus examples.';
+  }catch(e){$('dialog-error').textContent=e.message;}
+  finally{$('send-test').disabled=false;$('send-now').disabled=false;$('save').disabled=false;$('delete').disabled=false;$('send-test').textContent='Send test notification';}
 };
 $('delete').onclick=async()=>{
   if(!confirm('Remove this subscriber and stop their notifications?'))return;
