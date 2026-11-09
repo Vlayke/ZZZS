@@ -28,7 +28,7 @@ ZZZS_ALLOWED_NETWORKS=192.168.1.0/24,127.0.0.0/8
 
 ## Checks and alerts
 
-The first successful check and filter edits establish a baseline without an initial notification. Changes-only subscribers receive later additions/removals; daily-summary subscribers also receive unchanged summaries. Blank filter selections mean all values. The default check is 09:00 Europe/Ljubljana, configurable in Settings. Failed scheduled checks retry after 30 minutes. Refresh data updates previews without sending alerts or suppressing the scheduled notification check.
+New users joining through an invitation immediately receive the full current matching list, or a clear no-matches message. Failed initial deliveries remain queued across restarts. The delivered list becomes their baseline; filter edits establish a fresh baseline without another initial message. Changes-only subscribers receive later additions/removals; daily-summary subscribers also receive unchanged summaries. Blank filter selections mean all values. The default check is 09:00 Europe/Ljubljana, configurable in Settings. Failed scheduled checks retry after 30 minutes. Refresh data updates previews without sending alerts or suppressing the scheduled notification check.
 
 Manage edits aliases/filters, previews matches, pauses or removes subscribers. Rotating the same bot's token retains Telegram relationships; switching bots requires recipients to start the new bot. Invitations require a verified bot username. Connection failures are shown in the GUI.
 

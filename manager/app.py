@@ -50,10 +50,12 @@ def initialize():
         CREATE TABLE IF NOT EXISTS users(chat_id TEXT PRIMARY KEY,alias TEXT NOT NULL DEFAULT '',
           username TEXT NOT NULL DEFAULT '',enabled INTEGER NOT NULL DEFAULT 1,
           filters TEXT NOT NULL DEFAULT '{}',mode TEXT NOT NULL DEFAULT 'changes',
-          baseline TEXT,last_sent TEXT,status TEXT NOT NULL DEFAULT 'Ready');
+          baseline TEXT,last_sent TEXT,status TEXT NOT NULL DEFAULT 'Ready',initial_pending INTEGER NOT NULL DEFAULT 0);
         CREATE TABLE IF NOT EXISTS invites(token TEXT PRIMARY KEY,expires REAL,alias TEXT,filters TEXT,used INTEGER DEFAULT 0,mode TEXT DEFAULT 'changes',enabled INTEGER DEFAULT 1);
         CREATE TABLE IF NOT EXISTS events(id INTEGER PRIMARY KEY,at TEXT,kind TEXT,message TEXT);
         ''')
+        if 'initial_pending' not in {r['name'] for r in c.execute('PRAGMA table_info(users)')}:
+            c.execute('ALTER TABLE users ADD COLUMN initial_pending INTEGER NOT NULL DEFAULT 0')
         for k, v in {'hour': '09:00', 'last_check': '', 'last_success': '', 'last_error': '', 'offset': 0, 'next_retry': 0}.items():
             c.execute('INSERT OR IGNORE INTO settings VALUES(?,?)', (k, json.dumps(v)))
     # Only produced by the on-host migration; never part of source or API responses.
@@ -209,6 +211,38 @@ def matching(rows, filters):
             and (not filters.get('accepting_only', True) or r['accepting'] == 'DA')]
 
 
+def deliver_initial(uid):
+    with db() as c:
+        u = c.execute('SELECT * FROM users WHERE chat_id=? AND initial_pending=1', (uid,)).fetchone()
+    if not u:
+        return
+    data = cached()
+    if not data.get('fetched_at'):
+        return  # Keep the durable request until the first successful download.
+    rows = sorted(matching(data['doctors'], json.loads(u['filters'])),
+                  key=lambda r: (r['location'], r['name'], r['service']))
+    lines = ['Prijava na ZZZS obvestila je uspela.',
+             f'Začetni seznam: {len(rows)} zdravnikov ustreza vašim filtrom.']
+    if rows:
+        lines.extend('• ' + ' | '.join(r[k] for k in ['name', 'service', 'provider', 'address', 'location'])
+                     + ' | Sprejema: ' + r['accepting'] for r in rows)
+    else:
+        lines.append('Trenutno ni zdravnikov, ki bi ustrezali vašim filtrom.')
+    if not u['enabled']:
+        lines.append('Nadaljnja obvestila so začasno ustavljena.')
+    lines.append('\nPodatki ZZZS: ' + ', '.join(sorted(set(data['dates'].values())))
+                 + '\n/stop za odjavo, /status za stanje.')
+    try:
+        send(uid, '\n'.join(lines))
+    except RuntimeError as e:
+        with db() as c:
+            c.execute('UPDATE users SET status=? WHERE chat_id=? AND initial_pending=1', (str(e), uid))
+        return  # Retry after failure or restart without requiring another invite.
+    with db() as c:
+        c.execute('UPDATE users SET initial_pending=0,baseline=?,last_sent=?,status=? WHERE chat_id=? AND filters=? AND initial_pending=1',
+                  (json.dumps({r['id']: r for r in rows}), now(), f'{len(rows)} matching doctors', uid, u['filters']))
+
+
 def check(notify=True):
     if not scan_lock.acquire(False):
         return False
@@ -219,7 +253,7 @@ def check(notify=True):
         tmp.write_text(json.dumps(data, ensure_ascii=False), encoding='utf8')
         tmp.replace(DATA / 'catalog.json')
         with db() as c:
-            users = [dict(x) for x in c.execute('SELECT * FROM users WHERE enabled=1')]
+            users = [dict(x) for x in c.execute('SELECT * FROM users WHERE enabled=1 AND initial_pending=0')]
         errors = 0
         for u in users:
             rows = matching(data['doctors'], json.loads(u['filters']))
@@ -301,11 +335,11 @@ def handle_update(update):
             inv = c.execute('SELECT * FROM invites WHERE token=? AND used=0 AND expires>?', (token, time.time())).fetchone()
             if not inv:
                 return
-            c.execute('INSERT INTO users(chat_id,alias,username,filters,mode,enabled) VALUES(?,?,?,?,?,?) ON CONFLICT(chat_id) DO UPDATE SET alias=excluded.alias,username=excluded.username,filters=excluded.filters,mode=excluded.mode,enabled=excluded.enabled,baseline=NULL',
+            c.execute("INSERT INTO users(chat_id,alias,username,filters,mode,enabled,initial_pending,status) VALUES(?,?,?,?,?,?,1,'Initial list pending') ON CONFLICT(chat_id) DO UPDATE SET alias=excluded.alias,username=excluded.username,filters=excluded.filters,mode=excluded.mode,enabled=excluded.enabled,baseline=NULL,initial_pending=1,status='Initial list pending'",
                       (uid, inv['alias'] or m.get('from', {}).get('first_name', ''), m.get('from', {}).get('username', ''), inv['filters'], inv['mode'], inv['enabled']))
             c.execute('UPDATE invites SET used=1 WHERE token=?', (token,))
         event('registration', 'A subscriber joined using an invitation')
-        send(uid, 'Prijava na ZZZS obvestila je uspela. Skrbnik lahko prilagodi vaše filtre. /stop za odjavo, /status za stanje.')
+        deliver_initial(uid)
     elif text == '/status':
         with db() as c:
             u = c.execute('SELECT enabled,status FROM users WHERE chat_id=?', (uid,)).fetchone()
@@ -316,6 +350,7 @@ def handle_update(update):
 def worker():
     global worker_seen
     retry_at = 0
+    initial_retry_at = 0
     while True:
         worker_seen = time.time()
         try:
@@ -324,6 +359,12 @@ def worker():
             if (not (DATA / 'catalog.json').exists() or due) and time.time() > retry_at:
                 check()
                 retry_at = time.time() + 1800
+            if time.time() >= initial_retry_at:
+                initial_retry_at = time.time() + 60
+                with db() as c:
+                    pending = [r['chat_id'] for r in c.execute('SELECT chat_id FROM users WHERE initial_pending=1')]
+                for uid in pending:
+                    deliver_initial(uid)
             if setting('bot_token'):
                 if not setting('bot_username'):
                     me = bot_identity()

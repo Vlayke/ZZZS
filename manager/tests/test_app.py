@@ -47,15 +47,53 @@ class ManagementTests(unittest.TestCase):
         self.assertEqual(r.status_code,200)
         token = r.json['url'].split('=')[-1]
         update={'message':{'chat':{'id':123,'type':'private'},'text':'/start '+token,'from':{'username':'ana'}}}
-        with patch.object(a,'send') as sender:
+        data={'doctors':self.rows,'dates':{'gp':'09.11.2026'},'fetched_at':a.now()}
+        with patch.object(a,'cached',return_value=data),patch.object(a,'send') as sender:
             a.handle_update(update)
             a.handle_update(update)
             self.assertEqual(sender.call_count,1)
+            self.assertEqual(sender.call_args.args[0],'123')
+            self.assertIn('Začetni seznam: 1',sender.call_args.args[1])
+            self.assertIn('A | GP | P | S | LJ',sender.call_args.args[1])
+            self.assertNotIn('B | Dentist',sender.call_args.args[1])
         u=self.client.get('/api/state').json['users'][0]
         self.assertEqual(u['alias'],'Ana');self.assertEqual(u['mode'],'daily');self.assertEqual(u['filters']['locations'],['LJ'])
         with patch.object(a,'send'):
             a.handle_update({'message':{'chat':{'id':123,'type':'private'},'text':'/stop'}})
         self.assertEqual(self.client.get('/api/state').json['users'],[])
+
+    def test_initial_list_retry_and_no_duplicate_scheduled_alert(self):
+        r=self.post('invites',{'filters':{'locations':['LJ']}})
+        token=r.json['url'].split('=')[-1]
+        update={'message':{'chat':{'id':123,'type':'private'},'text':'/start '+token}}
+        data={'doctors':self.rows,'dates':{'gp':'09.11.2026'},'fetched_at':a.now()}
+        with patch.object(a,'cached',return_value=data),patch.object(a,'send',side_effect=RuntimeError('Telegram connection failed')):
+            a.handle_update(update)
+        with a.db() as c:
+            self.assertEqual(c.execute("SELECT initial_pending FROM users WHERE chat_id='123'").fetchone()[0],1)
+        with patch.object(a,'cached',return_value=data),patch.object(a,'send') as sender:
+            a.deliver_initial('123');a.deliver_initial('123')
+            self.assertEqual(sender.call_count,1)
+        with patch.object(a,'download_data',return_value=data),patch.object(a,'send') as sender:
+            a.check();sender.assert_not_called()
+
+    def test_initial_zero_hits_and_missing_catalog(self):
+        r=self.post('invites',{'filters':{'locations':['Nowhere']}})
+        token=r.json['url'].split('=')[-1]
+        update={'message':{'chat':{'id':123,'type':'private'},'text':'/start '+token}}
+        with patch.object(a,'cached',return_value={'doctors':[],'dates':{}}),patch.object(a,'send') as sender:
+            a.handle_update(update);sender.assert_not_called()
+        data={'doctors':self.rows,'dates':{'gp':'09.11.2026'},'fetched_at':a.now()}
+        with patch.object(a,'cached',return_value=data),patch.object(a,'send') as sender:
+            a.deliver_initial('123')
+            self.assertIn('Začetni seznam: 0',sender.call_args.args[1])
+            self.assertIn('Trenutno ni zdravnikov',sender.call_args.args[1])
+
+    def test_large_initial_message_is_split_for_telegram(self):
+        with patch.object(a,'telegram') as transport:
+            a.send('123','\n'.join('Doctor '+str(i)+' | '+'x'*180 for i in range(100)))
+        self.assertGreater(transport.call_count,1)
+        self.assertTrue(all(len(c.args[1]['text'])<=3500 for c in transport.call_args_list))
 
     def test_delivery_baselines_and_failures(self):
         for uid, loc in [('1','LJ'),('2','KR')]:
