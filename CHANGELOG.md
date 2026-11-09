@@ -1,3 +1,52 @@
+# Dnevnik sprememb
+
+## v2.0.0 — 2026-11-09
+
+ZZZS Doctor Alerts je neodvisna aplikacija za spremljanje javnih seznamov zdravnikov in pošiljanje osebnih obvestil prek Telegrama. **Projekt ni povezan z ZZZS.**
+
+### Nova aplikacija za upravljanje
+
+- Stalno delujoča storitev Docker s spletnim vmesnikom nadomešča posamezne zagone prek crona.
+- Vsak prejemnik ima svoje prikazno ime, filtre po kraju, kategoriji in vrsti ambulante ter možnost začasne ustavitve ali odstranitve.
+- Podprti so splošni in otroški zdravniki, ginekologi ter zobozdravniki, s predogledom zadetkov in pregledom delovanja.
+- Enkratna vabila vključujejo poudarjeno povezavo, kopiranje in samodejni pomik do nje.
+- Ob prijavi prejemnik takoj dobi celoten začetni seznam; neuspele dostave se ponovno poskušajo tudi po ponovnem zagonu.
+- **Send now** pošlje trenutni seznam, **Send test notification** pa izmišljeni primer zelenega plusa in rdečega minusa.
+- Obvestila se lahko pošiljajo samo ob spremembah ali kot dnevni povzetek; čas preverjanja je nastavljiv.
+
+### Preglednejša obvestila
+
+- Zeleni plus označuje dodane, rdeči minus pa odstranjene zdravnike.
+- Vsak zdravnik ima večvrstični zapis; seznami so jasno razvrščeni po krajih, z oznako nadaljevanja pri daljših sporočilih.
+- Ponavljajoči se podatek »Sprejema: DA« je odstranjen. Opozorilo za zdravnike, ki ne sprejemajo novih pacientov, ostane, kadar jih filtri vključujejo.
+- Testna sporočila so jasno označena in ne spreminjajo dejanskih primerjalnih seznamov.
+
+### Vmesnik in delovanje
+
+- Sistemska, svetla ali temna tema s shranjeno izbiro v brskalniku.
+- Medicinska ikona z Asklepijevo palico in vidna oznaka v2.0.
+- Trajno shranjevanje v SQLite, osebni primerjalni seznami, ponovni poskusi dostave in nadomestni način prepoznavanja bota.
+- Preverjanje dovoljenih naslovov IP in imen gostiteljev, zaščita pred spremembami z drugih spletnih mest ter zaščita žetonov pred razkritjem prek API-ja.
+- Neprivilegiran proces, datotečni sistem samo za branje, preverjanje zdravja in samodejni ponovni zagon.
+- Navodila za namestitev, prehod s stare skripte, varnostne kopije, obnovo in odpravljanje težav. Žetoni in podatki prejemnikov niso del objavljene kode.
+
+### Združljivost in preverjanje
+
+Privzeta storitev Compose je zdaj nova aplikacija. Stara skripta, Dockerfile in `docker-compose.legacy.yml` ostajajo na voljo. Žetone in prejemnike prenesite zasebno ter izključite stari urnik; zgodovina CSV se ne uvozi samodejno. Ob zagonu se odvisnosti namestijo iz PyPI, zato je potrebna omrežna povezava. Vmesnik nima ločene prijave in mora ostati v zaupanja vrednem lokalnem omrežju ali za tunelom SSH.
+
+Uspešno je opravljenih 18 samodejnih testov. Preverjeni so bili tudi delovanje nameščene storitve, različica, ikona, povezava s Telegramom in registracija vira Compose v Dockhandu. Pregled izvorne kode in zgodovine Git ni našel dejanskih žetonov, identifikatorjev prejemnikov ali zasebnih podatkov o domačem okolju.
+
+**[Navodila za namestitev](https://github.com/Vlayke/ZZZS/blob/main/docs/DEPLOYMENT.md)** · **[Hitri začetek](https://github.com/Vlayke/ZZZS#namestitev)**
+
+
+## v1.0.0 — 2025-12-16
+
+Prva javna izdaja skripte za filtriranje zdravnikov z Dockerjem in obvestili Telegram.
+
+---
+
+# English changelog
+
 # Changelog
 
 ## v2.0.0 — 2026-11-09

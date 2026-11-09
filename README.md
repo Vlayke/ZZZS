@@ -1,3 +1,67 @@
+# ZZZS · Obvestila o prostih zdravnikih · v2.0
+
+🇸🇮 **Slovenska različica je prva.** [English version below](#english-version).
+
+Aplikacija za samostojno gostovanje v lokalnem omrežju, ki prek Telegrama obvešča o zdravnikih, ki sprejemajo nove paciente. Uporablja javne podatke ZZZS. **Projekt ni povezan z ZZZS.**
+
+## Novosti v različici v2.0
+
+- Stalno delujoča storitev Docker s spletnim vmesnikom namesto posameznih zagonov prek crona.
+- Ločeni prejemniki obvestil, urejanje prikaznih imen in osebni filtri po kraju, kategoriji ter vrsti ambulante.
+- Enkratne povezave za prijavo, takojšen začetni seznam zadetkov, odjava z `/stop` in pregled stanja z `/status`.
+- Obvestila samo ob spremembah ali dnevni povzetki; gumba **Send now** in **Send test notification**.
+- Pregledni seznami po krajih; zeleni plusi za dodane in rdeči minusi za odstranjene zdravnike.
+- Podatki o splošnih in otroških zdravnikih, ginekologih ter zobozdravnikih; predogled zadetkov in pregled delovanja.
+- Trajno shranjene prijave, primerjalni seznami in ponovni poskusi dostave začetnih obvestil.
+- Svetla, temna ali sistemska tema, medicinska ikona in vidna oznaka različice.
+
+## Namestitev
+
+**[Navodila za namestitev](docs/DEPLOYMENT.md)** opisujejo Docker na Linuxu, dostop iz lokalnega omrežja, povezavo s Telegramom, posodobitve, varnostne kopije in prehod s stare skripte.
+
+```sh
+git clone https://github.com/Vlayke/ZZZS.git
+cd ZZZS
+git checkout v2.0.0
+cp .env.example .env
+mkdir -p data
+sudo chown 1000:1000 data
+chmod 700 data
+docker compose up -d
+```
+
+Na gostitelju Docker odprite **http://localhost:8096**. Za dostop iz druge naprave v `.env` nastavite zasebni naslov strežnika, dovoljeno ime gostitelja in zaupanja vredno podomrežje, kot je opisano v navodilih. Žeton bota Telegram vnesite zasebno v **Settings**; ni del izvorne kode ali konfiguracije Compose.
+
+Vmesnik je namenjen **zaupanja vrednemu lokalnemu omrežju in nima ločene prijave**. Ne izpostavljajte ga javnemu internetu. Privzeto so vrata dostopna samo prek povratnega naslova na gostitelju.
+
+## Prijava novega prejemnika
+
+1. Izberite **Add subscriber → Invitation link**.
+2. Vnesite prikazno ime, filtre in nastavitve obvestil.
+3. Ustvarite vabilo in kopirajte poudarjeno povezavo.
+4. Povezavo zasebno pošljite prejemniku. Ta jo odpre v Telegramu in pritisne **Start**.
+
+Povezava velja 24 ur in jo je mogoče uporabiti enkrat. Prejemnik takoj prejme začetni seznam. Kategorija določa širšo skupino, vrsta ambulante pa jo dodatno zoži; izpolnjena morata biti oba pogoja. Prazna izbira vključuje vse vrednosti.
+
+## Varnost in podatki
+
+Podatki aplikacije so shranjeni v zasebni mapi `data/`, vključno z žetonom bota in identifikatorji prejemnikov. Mapa je izključena iz Gita, prav tako datoteke z nastavitvami okolja, podatkovne zbirke, varnostne kopije in ključi. API aplikacije nikoli ne vrne shranjenega žetona. Podatkovno zbirko in kopije hranite zasebno; navodila opisujejo varno kopiranje in menjavo žetona.
+
+## Razvoj
+
+```sh
+python -m pip install -r manager/requirements.txt
+python -m unittest discover -s manager/tests -v
+```
+
+Produkcijska storitev uporablja en proces Gunicorn z osmimi nitmi HTTP. Ne povečujte števila procesov ali replik, saj isti proces izvaja urnik preverjanja in prevzema sporočila iz Telegrama. Slika Docker uporablja premično oznako `python:slim`. Odvisnosti se ob zagonu namestijo iz PyPI, zato ponovni zagon potrebuje dostop do registra in PyPI.
+
+Glejte tudi [opis sprememb](CHANGELOG.md), [podrobnosti upravljanja v angleščini](manager/README.md) in [arhivirana navodila za staro skripto](docs/legacy-readme.md). Izvirna skripta, Dockerfile in `docker-compose.legacy.yml` ostajajo na voljo zaradi združljivosti. Licenca MIT.
+
+---
+
+# English version
+
 # ZZZS Doctor Alerts · v2.0
 
 A self-hosted, local-network management app for Telegram notifications about doctors accepting new patients in Slovenia. Uses public ZZZS data; **not affiliated with ZZZS**.
