@@ -132,10 +132,18 @@ def send(chat_id, text):
         if block:
             blocks.append(block)
     part = ''
+    location = None
     for block in blocks:
+        heading = next((line for line in block.splitlines() if line.startswith('KRAJ: ')), None)
         if part and len(part) + len(block) + 2 > 3500:
             telegram('sendMessage', {'chat_id': chat_id, 'text': part})
             part = ''
+            if not heading and location and block.startswith(('• ', '🟢 + ', '🔴 − ')):
+                continuation = location + ' (nadaljevanje)\n'
+                if len(continuation) + len(block) <= 3500:
+                    block = continuation + block
+        if heading:
+            location = heading
         part += ('\n\n' if part else '') + block
     if part:
         telegram('sendMessage', {'chat_id': chat_id, 'text': part})
@@ -223,7 +231,7 @@ def doctor_list(rows, marker='•'):
         heading = ''
         if r['location'] != location:
             location = r['location']
-            heading = '📍 ' + clean('location') + '\n\n'
+            heading = 'KRAJ: ' + clean('location') + '\n'
         details = [marker + ' ' + clean('name')]
         details.extend('   ' + clean(k) for k in ['service', 'provider', 'address'] if clean(k))
         if r.get('accepting') == 'NE':
@@ -239,9 +247,10 @@ def message_footer(data):
 
 
 def full_list_message(rows, data, enabled=True, initial=False):
-    lines = ['✅ Prijava na ZZZS obvestila je uspela.\n\n📋 ZZZS · Vaši zdravniki' if initial else '📋 ZZZS · Vaši zdravniki',
+    lines = ['✅ Prijava na ZZZS obvestila je uspela.\n\n📋 ZZZS · Celoten seznam' if initial else '📋 ZZZS · Celoten seznam',
              f'{"Začetni seznam" if initial else "Trenutni seznam"}: {len(rows)} zdravnikov ustreza vašim filtrom.']
     if rows:
+        lines.append('Zdravniki so združeni po krajih.')
         lines.append('\n' + doctor_list(rows))
     else:
         lines.append('Trenutno ni zdravnikov, ki bi ustrezali vašim filtrom.')
