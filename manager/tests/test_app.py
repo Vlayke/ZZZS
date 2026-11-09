@@ -95,6 +95,33 @@ class ManagementTests(unittest.TestCase):
         self.assertGreater(transport.call_count,1)
         self.assertTrue(all(len(c.args[1]['text'])<=3500 for c in transport.call_args_list))
 
+    def test_send_now_targets_one_user_and_updates_baseline(self):
+        self.post('users',{'chat_id':'123','enabled':False,'filters':{'locations':['LJ']}})
+        self.post('users',{'chat_id':'456','filters':{'locations':['KR']}})
+        data={'doctors':self.rows,'dates':{'gp':'09.11.2026'},'fetched_at':a.now()}
+        with patch.object(a,'cached',return_value=data),patch.object(a,'send') as sender:
+            r=self.post('users/123/send',{})
+        self.assertEqual(r.status_code,200);self.assertEqual(r.json['count'],1)
+        sender.assert_called_once();self.assertEqual(sender.call_args.args[0],'123')
+        self.assertIn('A | GP',sender.call_args.args[1]);self.assertNotIn('B | Dentist',sender.call_args.args[1])
+        with a.db() as c:
+            u=c.execute("SELECT * FROM users WHERE chat_id='123'").fetchone()
+            self.assertFalse(u['enabled']);self.assertTrue(u['last_sent']);self.assertIn('a',json.loads(u['baseline']))
+            self.assertIsNone(c.execute("SELECT last_sent FROM users WHERE chat_id='456'").fetchone()[0])
+
+    def test_send_now_failure_and_missing_user(self):
+        self.assertEqual(self.post('users/missing/send',{}).status_code,404)
+        self.post('users',{'chat_id':'123','filters':{}})
+        data={'doctors':[],'dates':{'gp':'09.11.2026'},'fetched_at':a.now()}
+        with patch.object(a,'cached',return_value=data),patch.object(a,'send',side_effect=RuntimeError('Telegram connection failed')):
+            r=self.post('users/123/send',{})
+        self.assertEqual(r.status_code,502);self.assertIn('Telegram connection failed',r.json['error'])
+        with a.db() as c:
+            self.assertIsNone(c.execute("SELECT last_sent FROM users WHERE chat_id='123'").fetchone()[0])
+        with patch.object(a,'cached',return_value={'doctors':[],'dates':{}}),patch.object(a,'send') as sender:
+            self.assertEqual(self.post('users/123/send',{}).status_code,409);sender.assert_not_called()
+        self.assertFalse(a.scan_lock.locked())
+
     def test_delivery_baselines_and_failures(self):
         for uid, loc in [('1','LJ'),('2','KR')]:
             self.assertEqual(self.post('users',{'chat_id':uid,'alias':uid,'filters':{'locations':[loc]}}).status_code,200)

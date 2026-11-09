@@ -211,6 +211,21 @@ def matching(rows, filters):
             and (not filters.get('accepting_only', True) or r['accepting'] == 'DA')]
 
 
+def full_list_message(rows, data, enabled=True, initial=False):
+    lines = ['Prijava na ZZZS obvestila je uspela.' if initial else 'ZZZS · Trenutni seznam zdravnikov',
+             f'{"Začetni seznam" if initial else "Trenutni seznam"}: {len(rows)} zdravnikov ustreza vašim filtrom.']
+    if rows:
+        lines.extend('• ' + ' | '.join(r[k] for k in ['name', 'service', 'provider', 'address', 'location'])
+                     + ' | Sprejema: ' + r['accepting'] for r in rows)
+    else:
+        lines.append('Trenutno ni zdravnikov, ki bi ustrezali vašim filtrom.')
+    if not enabled:
+        lines.append('Nadaljnja obvestila so začasno ustavljena.')
+    lines.append('\nPodatki ZZZS: ' + ', '.join(sorted(set(data['dates'].values())))
+                 + '\n/stop za odjavo, /status za stanje.')
+    return '\n'.join(lines)
+
+
 def deliver_initial(uid):
     with db() as c:
         u = c.execute('SELECT * FROM users WHERE chat_id=? AND initial_pending=1', (uid,)).fetchone()
@@ -221,19 +236,8 @@ def deliver_initial(uid):
         return  # Keep the durable request until the first successful download.
     rows = sorted(matching(data['doctors'], json.loads(u['filters'])),
                   key=lambda r: (r['location'], r['name'], r['service']))
-    lines = ['Prijava na ZZZS obvestila je uspela.',
-             f'Začetni seznam: {len(rows)} zdravnikov ustreza vašim filtrom.']
-    if rows:
-        lines.extend('• ' + ' | '.join(r[k] for k in ['name', 'service', 'provider', 'address', 'location'])
-                     + ' | Sprejema: ' + r['accepting'] for r in rows)
-    else:
-        lines.append('Trenutno ni zdravnikov, ki bi ustrezali vašim filtrom.')
-    if not u['enabled']:
-        lines.append('Nadaljnja obvestila so začasno ustavljena.')
-    lines.append('\nPodatki ZZZS: ' + ', '.join(sorted(set(data['dates'].values())))
-                 + '\n/stop za odjavo, /status za stanje.')
     try:
-        send(uid, '\n'.join(lines))
+        send(uid, full_list_message(rows, data, u['enabled'], initial=True))
     except RuntimeError as e:
         with db() as c:
             c.execute('UPDATE users SET status=? WHERE chat_id=? AND initial_pending=1', (str(e), uid))
@@ -416,6 +420,7 @@ def security_headers(response):
 @app.errorhandler(403)
 @app.errorhandler(404)
 @app.errorhandler(409)
+@app.errorhandler(502)
 def error(e):
     return jsonify(error=e.description), e.code
 
@@ -474,6 +479,35 @@ def delete_user(uid):
     with db() as c:
         c.execute('DELETE FROM users WHERE chat_id=?', (uid,))
     return jsonify(ok=True)
+
+
+@app.post('/api/users/<uid>/send')
+def send_now(uid):
+    if not scan_lock.acquire(False):
+        abort(409, 'A data check or delivery is running. Please try again shortly.')
+    try:
+        with db() as c:
+            u = c.execute('SELECT * FROM users WHERE chat_id=?', (uid,)).fetchone()
+        if not u:
+            abort(404, 'Subscriber not found')
+        data = cached()
+        if not data.get('fetched_at'):
+            abort(409, 'No doctor data is available yet. Refresh data first.')
+        rows = sorted(matching(data['doctors'], json.loads(u['filters'])),
+                      key=lambda r: (r['location'], r['name'], r['service']))
+        try:
+            send(uid, full_list_message(rows, data, u['enabled']))
+        except RuntimeError as e:
+            with db() as c:
+                c.execute('UPDATE users SET status=? WHERE chat_id=?', (str(e), uid))
+            abort(502, str(e))
+        with db() as c:
+            c.execute('UPDATE users SET initial_pending=0,baseline=?,last_sent=?,status=? WHERE chat_id=? AND filters=?',
+                      (json.dumps({r['id']: r for r in rows}), now(), f'{len(rows)} matching doctors', uid, u['filters']))
+        event('delivery', f'Manual list delivered: {len(rows)} matching doctors')
+        return jsonify(ok=True, count=len(rows))
+    finally:
+        scan_lock.release()
 
 
 @app.post('/api/invites')

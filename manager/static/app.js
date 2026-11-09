@@ -49,7 +49,7 @@ function setMethod(m) {
   $('save').textContent=editing?'Save changes':m==='invite'?'Create invitation':'Add subscriber';
 }
 function openEditor(u) {
-  editing=u||null; $('user-form').reset(); $('dialog-error').textContent=''; $('preview').replaceChildren(); $('invite-result').hidden=true;
+  editing=u||null; $('user-form').reset(); $('dialog-error').textContent=''; $('dialog-feedback').textContent=''; $('preview').replaceChildren(); $('invite-result').hidden=true; $('copy').textContent='Copy link';
   $('editor-title').textContent=u?'Manage subscriber':'Add subscriber';
   $('alias').value=u?.alias||''; $('chat-id').value=u?.chat_id||''; $('chat-id').readOnly=!!u;
   $('mode').value=u?.mode||'changes'; $('enabled').checked=u?!!u.enabled:true;
@@ -59,6 +59,7 @@ function openEditor(u) {
   [...$('sources').options].forEach(o=>o.selected=(f.sources||[]).includes(o.value));
   $('location-search').value=''; $('service-search').value='';
   $('join-method').hidden=!!u; $('delete').hidden=!u;
+  $('send-now').hidden=!u; $('send-help').hidden=!u;
   setMethod(u?'manual':'invite'); checklist('locations'); checklist('services'); $('editor').showModal();
 }
 function checklist(key) {
@@ -84,9 +85,24 @@ $('user-form').onsubmit=async e=>{
   try {
     const b={alias:$('alias').value,chat_id:$('chat-id').value,filters:filters(),mode:$('mode').value,enabled:$('enabled').checked};
     if(!editing&&method==='invite'){
-      const r=await api('invites',b); $('invite-url').value=r.url; $('invite-result').hidden=false; $('save').textContent='Create another invitation';
+      const r=await api('invites',b); $('invite-url').value=r.url; $('invite-result').hidden=false; $('copy').textContent='Copy link'; $('save').textContent='Create another invitation';
+      $('invite-heading').focus({preventScroll:true});
+      $('invite-result').scrollIntoView({behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth',block:'start'});
     }else{await api('users',b); $('editor').close();notice('Subscriber saved. Filter changes start with a fresh baseline.');await load();}
   }catch(e){$('dialog-error').textContent=e.message;}finally{$('save').disabled=false;}
+};
+$('send-now').onclick=async()=>{
+  if(!editing||!$('user-form').reportValidity())return;
+  $('send-now').disabled=true; $('save').disabled=true; $('delete').disabled=true;
+  $('send-now').textContent='Sending…'; $('dialog-error').textContent=''; $('dialog-feedback').textContent='';
+  try{
+    const uid=editing.chat_id;
+    await api('users',{chat_id:uid,alias:$('alias').value,filters:filters(),mode:$('mode').value,enabled:$('enabled').checked});
+    const r=await api('users/'+encodeURIComponent(uid)+'/send',{});
+    $('dialog-feedback').textContent=`Sent to Telegram: ${r.count} matching doctors.`;
+    await load();
+  }catch(e){$('dialog-error').textContent=e.message;}
+  finally{$('send-now').disabled=false;$('save').disabled=false;$('delete').disabled=false;$('send-now').textContent='Send now';}
 };
 $('delete').onclick=async()=>{
   if(!confirm('Remove this subscriber and stop their notifications?'))return;
