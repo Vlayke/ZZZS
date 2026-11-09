@@ -10,6 +10,8 @@ The default Compose stack runs continuously, hosting a local management GUI and 
 
 ## Start
 
+The GUI header includes a **Theme** selector with System, Light and Dark. It follows device appearance by default and saves an explicit preference in the browser.
+
 Create a `data` directory at the repository root, writable by the container UID/GID (1000 by default). Keep permissions private: the database stores the bot token. From the repository root, run `docker compose up -d` and open `http://localhost:8096`.
 
 In **Settings**, enter the bot token from [@BotFather](https://t.me/BotFather). Explicitly rejected tokens are not saved; network/server errors save the token with verification pending and retry automatically. The token is never returned to the browser. Use **Add subscriber** to choose an alias and filters, create an invitation, and share it privately with the recipient. An existing numeric chat ID can also be entered, provided that user has already started the bot.
