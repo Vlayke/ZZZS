@@ -26,6 +26,7 @@ TZ = ZoneInfo('Europe/Ljubljana')
 PAGE = 'https://zavarovanec.zzzs.si/izbira-in-zamenjava-osebnega-zdravnika/seznami-zdravnikov/'
 SOURCES = {'gp': 'pri splošnih zdravnikih', 'gynaecology': 'pri ginekologih', 'dentistry': 'pri zobozdravnikih'}
 app = Flask(__name__, static_folder='static')
+VERSION = (Path(__file__).parent / 'VERSION').read_text(encoding='utf8').strip()
 app.config['MAX_CONTENT_LENGTH'] = 128 * 1024
 scan_lock = threading.Lock()
 worker_seen = time.time()
@@ -467,7 +468,7 @@ def index():
 @app.get('/health')
 def health():
     alive = os.environ.get('NO_WORKER') == '1' or time.time() - worker_seen < 300
-    return jsonify(status='ok' if alive else 'worker stalled'), 200 if alive else 503
+    return jsonify(status='ok' if alive else 'worker stalled', version=VERSION), 200 if alive else 503
 
 
 @app.get('/api/state')
@@ -483,7 +484,7 @@ def state():
             users.append(u)
         events = [dict(x) for x in c.execute('SELECT * FROM events ORDER BY id DESC LIMIT 20')]
     keys = ['hour', 'last_check', 'last_success', 'last_error', 'poll_error', 'bot_username']
-    return jsonify(users=users, events=events, settings={k: setting(k, '') for k in keys},
+    return jsonify(version=VERSION, users=users, events=events, settings={k: setting(k, '') for k in keys},
                    bot_configured=bool(setting('bot_token')), checking=scan_lock.locked(), dates=data['dates'],
                    catalog={'locations': sorted(set(r['location'] for r in data['doctors'])),
                             'services': sorted(set(r['service'] for r in data['doctors'])), 'total': len(data['doctors'])})

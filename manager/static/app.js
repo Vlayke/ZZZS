@@ -12,6 +12,7 @@ const fmt = s => s ? new Date(s).toLocaleString(undefined,{dateStyle:'medium',ti
 async function load() {
   try {
     state = await api('state');
+    $('app-version').textContent='v'+state.version.replace(/^(\d+\.\d+)\.0$/,'$1');
     const active = state.users.filter(u=>u.enabled).length;
     $('total-users').textContent=state.users.length;
     $('nav-count').textContent=state.users.length;

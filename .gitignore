@@ -1,5 +1,21 @@
 # env / secrets
 .env
+.env.*
+!.env.example
+!.env.legacy.example
+secrets/
+backups/
+*.db
+*.db-wal
+*.db-shm
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
+*.pem
+*.key
+*.tar
+*.tar.gz
+*.zip
 
 # outputs
 filtered_doctors_*.csv

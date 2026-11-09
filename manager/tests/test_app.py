@@ -36,6 +36,7 @@ class ManagementTests(unittest.TestCase):
         self.assertEqual(self.client.post('/api/users', json={'chat_id':'1'}).status_code, 403)
         self.assertEqual(self.client.post('/api/users', json={'chat_id':'1'}, headers={**self.headers, 'Origin':'https://evil.example'}).status_code,403)
         self.assertEqual(self.client.get('/health').status_code,200)
+        self.assertEqual(self.client.get('/health').json['version'],'2.0.0')
 
     def test_filter_isolation(self):
         self.assertEqual([r['id'] for r in a.matching(self.rows, {'locations':['LJ']})], ['a'])
