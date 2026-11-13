@@ -43,3 +43,7 @@ The invitation result is highlighted and automatically scrolled into view when c
 Telegram lists are grouped by town with separate multiline doctor entries (name, practice type, provider and address). Change alerts use 🟢 + for additions and 🔴 − for removals. Repeated accepting-yes labels are omitted; non-accepting doctors retain a warning when included by the filters. Long messages split between doctor entries when possible.
 
 Manage also provides **Send test notification**: a clearly labelled fictional example with one green-plus addition and one red-minus removal. It targets only the selected subscriber, works for paused subscribers, and does not save unsaved edits or modify filters, baselines, pending initial delivery or last-sent timestamps. Delivery success/failure appears in the form.
+
+## Suspend / Resume
+
+Subscribers can be suspended or resumed directly in the list or in Manage. Suspension stops automatic scheduled alerts and holds queued initial deliveries; it retains registration, alias, filters, last delivery and comparison baseline. Resume needs no new invitation or Telegram commands. Manual full-list and fictional test messages still work on explicit admin action. Changes accumulated since the prior delivery may appear at the next scheduled check.
