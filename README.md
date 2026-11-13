@@ -58,6 +58,10 @@ Produkcijska storitev uporablja en proces Gunicorn z osmimi nitmi HTTP. Ne pove�
 
 Glejte tudi [opis sprememb](CHANGELOG.md), [podrobnosti upravljanja v angleščini](manager/README.md) in [arhivirana navodila za staro skripto](docs/legacy-readme.md). Izvirna skripta, Dockerfile in `docker-compose.legacy.yml` ostajajo na voljo zaradi združljivosti. Licenca MIT.
 
+## Začasna ustavitev obvestil
+
+Ko prejemnik najde zdravnika, pri njem kliknite **Suspend** ali v **Manage** izberite **Suspend notifications**. Samodejna obvestila in začetne dostave na čakanju se ustavijo, prijava, prikazno ime in filtri pa ostanejo shranjeni. **Resume** oziroma **Resume notifications** obveščanje znova omogoči brez novega vabila ali ukazov Telegram. Gumba **Send now** in **Send test notification** ostaneta na voljo kot ročni dejanji. Po nadaljevanju se ob rednem preverjanju lahko pokažejo tudi spremembe od zadnje dostave pred ustavitvijo.
+
 ---
 
 # English version
@@ -119,3 +123,7 @@ python -m unittest discover -s manager/tests -v
 Production uses one Gunicorn worker with eight HTTP threads. Do not scale workers or replicas: the same process owns scheduling and Telegram polling. The Docker image follows the moving `python:slim` tag. Dependencies are installed from PyPI at startup, so restarts require registry/PyPI connectivity.
 
 See [release notes](CHANGELOG.md), [management behavior](manager/README.md) and the [archived legacy instructions](docs/legacy-readme.md). The original script, Dockerfile and `docker-compose.legacy.yml` remain available for compatibility. MIT licensed.
+
+## Suspend and resume a subscriber
+
+Use **Suspend** in the subscriber list or **Manage → Suspend notifications** to stop automatic alerts and queued initial messages while keeping the registration, alias, filters and history. **Resume** / **Resume notifications** enables delivery again without another invitation or Telegram command. Explicit manual/test sends remain available. A later scheduled check may report changes since the last delivery before suspension.

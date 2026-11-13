@@ -29,6 +29,7 @@ app = Flask(__name__, static_folder='static')
 VERSION = (Path(__file__).parent / 'VERSION').read_text(encoding='utf8').strip()
 app.config['MAX_CONTENT_LENGTH'] = 128 * 1024
 scan_lock = threading.Lock()
+notification_lock = threading.RLock()
 worker_seen = time.time()
 
 
@@ -261,9 +262,21 @@ def full_list_message(rows, data, enabled=True, initial=False):
     return '\n'.join(lines)
 
 
+def send_automatic(uid, text, filters):
+    # Serialize suspension with automatic delivery, then re-check live settings.
+    # A recipient selected before an update/download may since have been paused.
+    with notification_lock:
+        with db() as c:
+            u=c.execute('SELECT enabled,filters FROM users WHERE chat_id=?',(uid,)).fetchone()
+        if not u or not u['enabled'] or u['filters']!=filters:
+            return False
+        send(uid,text)
+        return True
+
+
 def deliver_initial(uid):
     with db() as c:
-        u = c.execute('SELECT * FROM users WHERE chat_id=? AND initial_pending=1', (uid,)).fetchone()
+        u = c.execute('SELECT * FROM users WHERE chat_id=? AND initial_pending=1 AND enabled=1', (uid,)).fetchone()
     if not u:
         return
     data = cached()
@@ -272,7 +285,8 @@ def deliver_initial(uid):
     rows = sorted(matching(data['doctors'], json.loads(u['filters'])),
                   key=lambda r: (r['location'], r['name'], r['service']))
     try:
-        send(uid, full_list_message(rows, data, u['enabled'], initial=True))
+        if not send_automatic(uid, full_list_message(rows, data, u['enabled'], initial=True), u['filters']):
+            return
     except RuntimeError as e:
         with db() as c:
             c.execute('UPDATE users SET status=? WHERE chat_id=? AND initial_pending=1', (str(e), uid))
@@ -314,7 +328,8 @@ def check(notify=True):
                     lines.append('\n✓ Ni sprememb v vašem izboru.')
                 lines.append('\n' + message_footer(data))
                 try:
-                    send(u['chat_id'], '\n'.join(lines))
+                    if not send_automatic(u['chat_id'], '\n'.join(lines), u['filters']):
+                        continue
                     with db() as c:
                         c.execute('UPDATE users SET last_sent=? WHERE chat_id=?', (now(), u['chat_id']))
                 except RuntimeError as e:
@@ -501,12 +516,24 @@ def save_user():
     mode = b.get('mode', 'changes')
     if mode not in ['daily', 'changes']:
         abort(400, 'Unknown notification mode')
-    with db() as c:
+    with notification_lock, db() as c:
         c.execute('''INSERT INTO users(chat_id,alias,filters,mode,enabled) VALUES(?,?,?,?,?)
           ON CONFLICT(chat_id) DO UPDATE SET alias=excluded.alias,filters=excluded.filters,mode=excluded.mode,
           enabled=excluded.enabled,baseline=CASE WHEN users.filters!=excluded.filters THEN NULL ELSE users.baseline END''',
                   (uid, alias, filters, mode, int(bool(b.get('enabled', True)))))
     return jsonify(ok=True)
+
+
+@app.post('/api/users/<uid>/subscription')
+def subscription(uid):
+    body=request.get_json()
+    if not isinstance(body,dict) or type(body.get('enabled')) is not bool:
+        abort(400,'Enabled must be true or false')
+    with notification_lock, db() as c:
+        result=c.execute('UPDATE users SET enabled=? WHERE chat_id=?',(int(body['enabled']),uid))
+        if not result.rowcount:
+            abort(404,'Subscriber not found')
+    return jsonify(ok=True,enabled=body['enabled'])
 
 
 @app.delete('/api/users/<uid>')

@@ -17,7 +17,7 @@ async function load() {
     $('total-users').textContent=state.users.length;
     $('nav-count').textContent=state.users.length;
     $('list-count').textContent=state.users.length;
-    $('active-users').textContent=`${active} active · ${state.users.length-active} paused`;
+    $('active-users').textContent=`${active} active · ${state.users.length-active} suspended`;
     $('total-doctors').textContent=state.catalog.total.toLocaleString();
     $('check-hour').textContent=state.settings.hour;
     $('refresh').disabled=state.checking;
@@ -28,6 +28,10 @@ async function load() {
     $('bot-state').textContent=state.bot_configured?(state.settings.poll_error?`Bot token saved · ${state.settings.poll_error}`:state.settings.bot_username?`Connected · @${state.settings.bot_username}`:'Bot token saved · verifying connection…'):'No Telegram bot configured';
     if(document.activeElement!==$('hour')) $('hour').value=state.settings.hour;
     renderUsers();
+    if(editing&&$('editor').open){
+      const latest=state.users.find(u=>u.chat_id===editing.chat_id);
+      if(latest){editing.enabled=latest.enabled;$('enabled').checked=!!latest.enabled;renderSubscription();}
+    }
     $('events').innerHTML=state.events.length?state.events.map(e=>`<div class="event"><time>${esc(fmt(e.at))}</time><div><b>${esc(e.kind)}</b><p>${esc(e.message)}</p></div></div>`).join(''):'<div class="event">No activity yet.</div>';
   } catch(e) {notice(e.message);}
 }
@@ -39,9 +43,28 @@ function renderUsers() {
     const f=u.filters,loc=f.locations||[],svc=f.services||[];
     const tags=[...loc.slice(0,2),...(loc.length>2?[`+${loc.length-2} locations`]:[]),...(svc.length?[`${svc.length} practice types`]:['All practice types'])];
     if(!loc.length)tags.unshift('All locations');
-    return `<tr><td><div class="identity"><span class="avatar">${esc((u.alias||u.username||'TG').slice(0,2).toUpperCase())}</span><div><b>${esc(u.alias||u.username||'Telegram subscriber')}</b><small>${esc(u.username?'@'+u.username:u.chat_id)}</small></div></div></td><td><div class="pills">${tags.map(t=>`<span class="pill">${esc(t)}</span>`).join('')}</div></td><td><span class="count">${u.matches}</span><span class="cell-small">matching doctors</span></td><td><span class="status ${u.enabled?'':'paused'}">${u.enabled?'● Active':'Ⅱ Paused'}</span><span class="cell-small">${u.mode==='daily'?'Daily summary':'Changes only'}</span><span class="cell-small">Last sent: ${esc(fmt(u.last_sent))}</span>${u.status?.startsWith('Telegram')?`<span class="cell-small">${esc(u.status)}</span>`:''}</td><td><button class="edit" data-id="${esc(u.chat_id)}">Manage</button></td></tr>`;
+    return `<tr><td><div class="identity"><span class="avatar">${esc((u.alias||u.username||'TG').slice(0,2).toUpperCase())}</span><div><b>${esc(u.alias||u.username||'Telegram subscriber')}</b><small>${esc(u.username?'@'+u.username:u.chat_id)}</small></div></div></td><td><div class="pills">${tags.map(t=>`<span class="pill">${esc(t)}</span>`).join('')}</div></td><td><span class="count">${u.matches}</span><span class="cell-small">matching doctors</span></td><td><span class="status ${u.enabled?'':'paused'}">${u.enabled?'● Active':'Ⅱ Suspended'}</span><span class="cell-small">${u.mode==='daily'?'Daily summary':'Changes only'}</span><span class="cell-small">Last sent: ${esc(fmt(u.last_sent))}</span>${u.status?.startsWith('Telegram')?`<span class="cell-small">${esc(u.status)}</span>`:''}</td><td><div class="subscriber-actions"><button class="edit" data-id="${esc(u.chat_id)}">Manage</button><button class="edit" data-toggle-id="${esc(u.chat_id)}">${u.enabled?'Suspend':'Resume'}</button></div></td></tr>`;
   }).join('');
   $('users').querySelectorAll('[data-id]').forEach(b=>b.onclick=()=>openEditor(state.users.find(u=>u.chat_id===b.dataset.id)));
+  $('users').querySelectorAll('[data-toggle-id]').forEach(b=>b.onclick=async()=>{
+    b.disabled=true;
+    try{await changeSubscription(state.users.find(u=>u.chat_id===b.dataset.toggleId));}
+    catch(e){notice(e.message);b.disabled=false;}
+  });
+}
+function renderSubscription(){
+  if(!editing)return;
+  $('subscription-status').textContent=editing.enabled?'● Automatic notifications active':'Ⅱ Automatic notifications suspended';
+  $('toggle-subscription').textContent=editing.enabled?'Suspend notifications':'Resume notifications';
+}
+async function changeSubscription(user){
+  if(!user)return;
+  const enabled=!user.enabled;
+  await api('users/'+encodeURIComponent(user.chat_id)+'/subscription',{enabled});
+  await load();
+  const message=enabled?'Notifications resumed. Their registration and filters are unchanged.':'Notifications suspended. Their registration and filters are kept.';
+  if(editing&&editing.chat_id===user.chat_id&&$('editor').open)$('dialog-feedback').textContent=message;
+  else notice(message);
 }
 function setMethod(m) {
   method=m;
@@ -62,6 +85,7 @@ function openEditor(u) {
   $('join-method').hidden=!!u; $('delete').hidden=!u;
   $('send-now').hidden=!u; $('send-help').hidden=!u;
   $('test-notification-area').hidden=!u;
+  $('subscription-area').hidden=!u;$('enabled-row').hidden=!!u;renderSubscription();
   setMethod(u?'manual':'invite'); checklist('locations'); checklist('services'); $('editor').showModal();
 }
 function checklist(key) {
@@ -95,7 +119,7 @@ $('user-form').onsubmit=async e=>{
 };
 $('send-now').onclick=async()=>{
   if(!editing||!$('user-form').reportValidity())return;
-  $('send-now').disabled=true; $('send-test').disabled=true; $('save').disabled=true; $('delete').disabled=true;
+  $('send-now').disabled=true; $('send-test').disabled=true; $('toggle-subscription').disabled=true; $('save').disabled=true; $('delete').disabled=true;
   $('send-now').textContent='Sending…'; $('dialog-error').textContent=''; $('dialog-feedback').textContent='';
   try{
     const uid=editing.chat_id;
@@ -104,18 +128,23 @@ $('send-now').onclick=async()=>{
     $('dialog-feedback').textContent=`Sent to Telegram: ${r.count} matching doctors.`;
     await load();
   }catch(e){$('dialog-error').textContent=e.message;}
-  finally{$('send-now').disabled=false;$('send-test').disabled=false;$('save').disabled=false;$('delete').disabled=false;$('send-now').textContent='Send now';}
+  finally{$('send-now').disabled=false;$('send-test').disabled=false;$('toggle-subscription').disabled=false;$('save').disabled=false;$('delete').disabled=false;$('send-now').textContent='Send now';}
+};
+$('toggle-subscription').onclick=async()=>{
+  $('toggle-subscription').disabled=true;$('send-now').disabled=true;$('send-test').disabled=true;$('save').disabled=true;$('dialog-error').textContent='';
+  try{await changeSubscription(editing);}catch(e){$('dialog-error').textContent=e.message;}
+  finally{$('toggle-subscription').disabled=false;$('send-now').disabled=false;$('send-test').disabled=false;$('save').disabled=false;}
 };
 $('send-test').onclick=async()=>{
   if(!editing)return;
   const uid=editing.chat_id;
-  $('send-test').disabled=true;$('send-now').disabled=true;$('save').disabled=true;$('delete').disabled=true;
+  $('send-test').disabled=true;$('send-now').disabled=true;$('toggle-subscription').disabled=true;$('save').disabled=true;$('delete').disabled=true;
   $('send-test').textContent='Sending test…';$('dialog-error').textContent='';$('dialog-feedback').textContent='';
   try{
     await api('users/'+encodeURIComponent(uid)+'/test',{});
     $('dialog-feedback').textContent='Test notification sent: fictional green-plus and red-minus examples.';
   }catch(e){$('dialog-error').textContent=e.message;}
-  finally{$('send-test').disabled=false;$('send-now').disabled=false;$('save').disabled=false;$('delete').disabled=false;$('send-test').textContent='Send test notification';}
+  finally{$('send-test').disabled=false;$('send-now').disabled=false;$('toggle-subscription').disabled=false;$('save').disabled=false;$('delete').disabled=false;$('send-test').textContent='Send test notification';}
 };
 $('delete').onclick=async()=>{
   if(!confirm('Remove this subscriber and stop their notifications?'))return;

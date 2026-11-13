@@ -1,5 +1,12 @@
 # Dnevnik sprememb
 
+## Posodobitev po v2.0.0 — 2026-11-13
+
+- Jasna gumba Suspend / Resume v seznamu prejemnikov in oknu za urejanje.
+- Ustavitev ohrani prijavo, prikazno ime, filtre in zgodovino ter zadrži začetne dostave na čakanju.
+- Ponovno preverjanje stanja pred samodejnim pošiljanjem prepreči pošiljanje prejemniku, ki je bil med preverjanjem ustavljen.
+- 21 testov pokriva tudi ohranitev nastavitev, nadaljevanje in ustavljene začetne dostave.
+
 ## v2.0.0 — 2026-11-09
 
 ZZZS Doctor Alerts je neodvisna aplikacija za spremljanje javnih seznamov zdravnikov in pošiljanje osebnih obvestil prek Telegrama. **Projekt ni povezan z ZZZS.**
@@ -46,6 +53,13 @@ Prva javna izdaja skripte za filtriranje zdravnikov z Dockerjem in obvestili Tel
 ---
 
 # English changelog
+
+## Update after v2.0.0 — 2026-11-13
+
+- Explicit Suspend / Resume actions in the subscriber list and edit window.
+- Suspension preserves registration, alias, filters and history while holding automatic initial deliveries.
+- Live eligibility is rechecked immediately before automatic sending.
+- 21 tests include preservation, resumption and pending-initial suppression.
 
 # Changelog
 

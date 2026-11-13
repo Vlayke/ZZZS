@@ -158,6 +158,42 @@ class ManagementTests(unittest.TestCase):
         self.assertEqual(r.status_code,502);self.assertEqual(r.json['error'],'Telegram connection failed')
         self.assertEqual(self.client.post('/api/users/123/test',json={}).status_code,403)
 
+    def test_suspend_and_resume_preserve_registration_settings_and_history(self):
+        self.post('users',{'chat_id':'123','alias':'Ana','mode':'daily','filters':{'locations':['LJ']}})
+        with a.db() as c:
+            c.execute("UPDATE users SET baseline='{}',last_sent='yesterday',initial_pending=1 WHERE chat_id='123'")
+            before=dict(c.execute("SELECT * FROM users WHERE chat_id='123'").fetchone())
+        with patch.object(a,'send') as sender:
+            r=self.post('users/123/subscription',{'enabled':False})
+            self.assertEqual(r.status_code,200);self.assertFalse(r.json['enabled'])
+            self.assertFalse(a.send_automatic('123','should not send',before['filters']))
+            a.deliver_initial('123');sender.assert_not_called()
+        with a.db() as c:
+            suspended=dict(c.execute("SELECT * FROM users WHERE chat_id='123'").fetchone())
+        self.assertEqual(suspended,{**before,'enabled':0})
+        self.assertEqual(self.post('users/123/subscription',{'enabled':True}).status_code,200)
+        with a.db() as c:
+            self.assertEqual(dict(c.execute("SELECT * FROM users WHERE chat_id='123'").fetchone()),before)
+        data={'doctors':self.rows,'dates':{'gp':'13.11.2026'},'fetched_at':a.now()}
+        with patch.object(a,'cached',return_value=data),patch.object(a,'send') as sender:
+            a.deliver_initial('123');sender.assert_called_once()
+            self.assertEqual(sender.call_args.args[0],'123');self.assertIn('• A',sender.call_args.args[1])
+
+    def test_suspended_user_skips_schedule_and_resumes_without_new_invite(self):
+        self.post('users',{'chat_id':'123','filters':{'locations':['LJ']}})
+        data={'doctors':self.rows,'dates':{'gp':'13.11.2026'}}
+        with patch.object(a,'download_data',return_value=data),patch.object(a,'send') as sender:
+            a.check();sender.assert_not_called()
+            self.post('users/123/subscription',{'enabled':False})
+            data['doctors']=[];a.check();sender.assert_not_called()
+            self.post('users/123/subscription',{'enabled':True})
+            a.check();sender.assert_called_once();self.assertIn('🔴 − A',sender.call_args.args[1])
+
+    def test_subscription_validation_and_access_protection(self):
+        self.assertEqual(self.post('users/missing/subscription',{'enabled':False}).status_code,404)
+        self.assertEqual(self.post('users/123/subscription',{'enabled':'false'}).status_code,400)
+        self.assertEqual(self.client.post('/api/users/123/subscription',json={'enabled':False}).status_code,403)
+
     def test_delivery_baselines_and_failures(self):
         for uid, loc in [('1','LJ'),('2','KR')]:
             self.assertEqual(self.post('users',{'chat_id':uid,'alias':uid,'filters':{'locations':[loc]}}).status_code,200)
